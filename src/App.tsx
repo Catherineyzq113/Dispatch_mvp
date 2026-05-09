@@ -34,7 +34,7 @@ function App() {
   const stats: Stats = useMemo(() => {
     const unitsMonitored = doorUnits.length;
     const alertsActive = doorUnits.filter(u => u.riskLevel === 'High' || u.riskLevel === 'Critical').length;
-    const agentsWorking = 3; // Fixed for demo
+    const agentsWorking = feedEntries.filter((e: FeedEntry) => e.outcome === 'pending').length;
     const appointmentsBooked = feedEntries.filter(
       e => e.actionType === 'Appointment Booked' || e.actionType === 'Booking Confirmation'
     ).length;
@@ -201,7 +201,7 @@ function App() {
       <footer className="border-t border-dispatch-border">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-3">
           <div className="flex items-center justify-center text-xs text-dispatch-text-secondary">
-            <span>ProSlide Door Systems · v1.0.0</span>
+            <span>Schuco Service Operations · Dispatch v1.0.0</span>
           </div>
         </div>
       </footer>

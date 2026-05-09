@@ -2,8 +2,8 @@ import type { FeedEntry } from '@/types';
 import { FeedCard } from './FeedCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Filter, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { Filter, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 interface ActivityFeedProps {
   entries: FeedEntry[];
@@ -15,6 +15,35 @@ interface ActivityFeedProps {
 type FilterType = 'all' | 'alerts' | 'outreach' | 'bookings' | 'followups';
 type StatusFilter = 'all' | 'pending' | 'completed' | 'failed';
 
+function useElapsedMinutes(timestamp: Date) {
+  const [minutes, setMinutes] = useState(() =>
+    Math.floor((Date.now() - timestamp.getTime()) / 60000)
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMinutes(Math.floor((Date.now() - timestamp.getTime()) / 60000));
+    }, 30000);
+    return () => clearInterval(id);
+  }, [timestamp]);
+  return minutes;
+}
+
+function SlaTimer({ timestamp, urgency }: { timestamp: Date; urgency: 'high' | 'medium' }) {
+  const minutes = useElapsedMinutes(timestamp);
+  const color = minutes >= 30
+    ? 'text-dispatch-status-red'
+    : minutes >= 15
+    ? 'text-dispatch-status-amber'
+    : 'text-dispatch-text-secondary';
+  const label = minutes < 1 ? 'Just now' : `${minutes}m waiting`;
+  return (
+    <span className={cn('flex items-center gap-1 text-[10px] font-mono', color, urgency === 'high' && minutes >= 15 && 'animate-pulse')}>
+      <Clock className="w-3 h-3" />
+      {label}
+    </span>
+  );
+}
+
 export function ActivityFeed({
   entries,
   onRefresh,
@@ -24,8 +53,24 @@ export function ActivityFeed({
   const [actionFilter, setActionFilter] = useState<FilterType>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
+  // Items requiring human action — always shown at top regardless of filters
+  const actionRequired = entries.filter(
+    (e) =>
+      (e.actionType === 'Alert Triage' && e.outcome === 'warning') ||
+      (e.actionType === 'Proactive Outreach' && e.outcome === 'pending')
+  );
+
+  const isFiltering = actionFilter !== 'all' || statusFilter !== 'all';
+
   const filteredEntries = entries.filter((entry) => {
-    // Action type filter
+    const isActionRequired =
+      (entry.actionType === 'Alert Triage' && entry.outcome === 'warning') ||
+      (entry.actionType === 'Proactive Outreach' && entry.outcome === 'pending');
+
+    // In default view, hide action-required from main feed (they're pinned above)
+    // When a filter is active, include them so filters actually work
+    if (isActionRequired && !isFiltering) return false;
+
     if (actionFilter !== 'all') {
       const actionMap: Record<FilterType, string[]> = {
         all: [],
@@ -34,12 +79,9 @@ export function ActivityFeed({
         bookings: ['Booking Confirmation', 'Appointment Booked'],
         followups: ['Follow-up', 'Post-Repair Check', 'Reminder Sent'],
       };
-      if (!actionMap[actionFilter].includes(entry.actionType)) {
-        return false;
-      }
+      if (!actionMap[actionFilter].includes(entry.actionType)) return false;
     }
 
-    // Status filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'pending' && entry.outcome !== 'pending') return false;
       if (statusFilter === 'completed' && entry.outcome !== 'success') return false;
@@ -125,14 +167,56 @@ export function ActivityFeed({
         </div>
       </div>
 
-      {/* Feed List */}
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
-          {filteredEntries.map((entry) => (
-            <FeedCard key={entry.id} entry={entry} onUpdateEntry={onUpdateEntry} />
-          ))}
+        <div className="p-4 space-y-4">
 
-          {filteredEntries.length === 0 && (
+          {/* Pinned: Requires Action queue */}
+          {actionRequired.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-dispatch-status-amber" />
+                <span className="text-xs font-semibold text-dispatch-status-amber uppercase tracking-wider">
+                  Requires Your Action
+                </span>
+                <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold rounded bg-dispatch-status-amber text-dispatch-bg">
+                  {actionRequired.length}
+                </span>
+              </div>
+              <div className="space-y-2 rounded-lg border border-dispatch-status-amber/30 bg-dispatch-status-amber/5 p-2">
+                {actionRequired.map((entry) => (
+                  <div key={entry.id} className="relative">
+                    <div className="absolute top-3 right-12 z-10">
+                      <SlaTimer
+                        timestamp={entry.timestamp}
+                        urgency={entry.actionType === 'Alert Triage' ? 'high' : 'medium'}
+                      />
+                    </div>
+                    <FeedCard entry={entry} onUpdateEntry={onUpdateEntry} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Agent Activity log */}
+          {filteredEntries.length > 0 && (
+            <div>
+              {actionRequired.length > 0 && (
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <span className="text-xs font-semibold text-dispatch-text-secondary uppercase tracking-wider">
+                    Agent Activity
+                  </span>
+                </div>
+              )}
+              <div className="space-y-3">
+                {filteredEntries.map((entry) => (
+                  <FeedCard key={entry.id} entry={entry} onUpdateEntry={onUpdateEntry} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {filteredEntries.length === 0 && actionRequired.length === 0 && (
             <div className="py-12 text-center">
               <p className="text-sm text-dispatch-text-secondary mb-1">No activity entries found</p>
               <p className="text-xs text-dispatch-text-tertiary">Try adjusting your filters</p>

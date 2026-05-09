@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import type { FeedEntry } from '@/types';
+import { useState, useRef } from 'react';
+import type { FeedEntry, Message } from '@/types';
 import { TriggerContext } from './TriggerContext';
 import { ConversationThread } from './ConversationThread';
+import { ChatInput } from './ChatInput';
 import { OperatorActionBar } from './OperatorActionBar';
 import { AlertTriageActionBar } from './AlertTriageActionBar';
 import { cn } from '@/lib/utils';
-import { Bot, ChevronDown, ChevronUp, Clock, Zap, Sparkles } from 'lucide-react';
+import { Bot, ChevronDown, ChevronUp, Clock, Zap, Sparkles, UserCircle, StickyNote, Check } from 'lucide-react';
+
+const ASSIGNEES = ['Unassigned', 'DM (you)', 'Sarah K.', 'Tom R.', 'Priya N.'];
 
 interface FeedCardProps {
   entry: FeedEntry;
@@ -13,10 +16,30 @@ interface FeedCardProps {
 }
 
 export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [localEntry, setLocalEntry] = useState(entry);
   const [isManualMode, setIsManualMode] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [assignee, setAssignee] = useState('Unassigned');
+  const [assigneeSubmitted, setAssigneeSubmitted] = useState(false);
+  const [note, setNote] = useState('');
+  const [savedNotes, setSavedNotes] = useState<{ text: string; author: string; time: string }[]>([]);
+
+  const handleToggleExpand = () => {
+    const next = !isExpanded;
+    setIsExpanded(next);
+    if (next) {
+      setTimeout(() => {
+        cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    }
+  };
+
+  const handleAssigneeSubmit = () => {
+    setAssigneeSubmitted(true);
+    setTimeout(() => setAssigneeSubmitted(false), 2000);
+  };
 
   // Use local entry if we have chat updates, otherwise use props
   const currentEntry = localEntry.conversation.length > entry.conversation.length ? localEntry : entry;
@@ -100,6 +123,21 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
     return date.toLocaleDateString();
   };
 
+  const handleSendMessage = (content: string) => {
+    const newMessage: Message = {
+      id: `msg-${Date.now()}`,
+      sender: 'agent',
+      content,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    const updatedEntry = {
+      ...currentEntry,
+      conversation: [...currentEntry.conversation, newMessage],
+    };
+    setLocalEntry(updatedEntry);
+    if (onUpdateEntry) onUpdateEntry(updatedEntry);
+  };
+
   // Operator action handlers for Proactive Outreach
   const handleTakeOver = () => {
     setIsManualMode(!isManualMode);
@@ -170,6 +208,7 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
 
   return (
     <div
+      ref={cardRef}
       className={cn(
         'relative bg-dispatch-card rounded-xl border overflow-hidden',
         'transition-all duration-250',
@@ -193,7 +232,7 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
       <div className="pl-4">
         {/* Collapsed State */}
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={handleToggleExpand}
           className="w-full p-4 text-left"
         >
           {/* Row 1: Agent + Action + Time */}
@@ -261,12 +300,20 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
                 {currentEntry.outcomeLabel}
               </span>
 
-              {/* Confidence Bar with visual cue for lower confidence */}
-              <div className={cn(
-                "flex items-center gap-2 px-2 py-1 rounded-md",
-                currentEntry.confidence < 70 && "bg-dispatch-status-red/10",
-                currentEntry.confidence >= 70 && currentEntry.confidence < 85 && "bg-dispatch-status-amber/10"
-              )}>
+              {/* Confidence Bar */}
+              <div
+                title={
+                  currentEntry.confidence >= 85
+                    ? `High confidence (${currentEntry.confidence}%) — agent is certain about this action and outcome`
+                    : currentEntry.confidence >= 70
+                    ? `Moderate confidence (${currentEntry.confidence}%) — agent recommends review before proceeding`
+                    : `Low confidence (${currentEntry.confidence}%) — human review required before taking action`
+                }
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1 rounded-md cursor-help",
+                  currentEntry.confidence < 70 && "bg-dispatch-status-red/10",
+                  currentEntry.confidence >= 70 && currentEntry.confidence < 85 && "bg-dispatch-status-amber/10"
+                )}>
                 <span className="text-xs text-dispatch-text-secondary">Confidence</span>
                 <div className="w-16 h-1.5 bg-dispatch-border rounded-full overflow-hidden">
                   <div
@@ -306,7 +353,12 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
             <div className="space-y-4">
               <TriggerContext context={currentEntry.triggerContext} />
               <ConversationThread messages={currentEntry.conversation} customerInitial={customerInitial} />
-              
+
+              {/* Chat input appears when operator takes over the conversation */}
+              {isManualMode && (
+                <ChatInput onSend={handleSendMessage} placeholder="Send message to customer..." />
+              )}
+
               {/* Operator Action Bar for Proactive Outreach - pending cards */}
               {(isProactiveOutreach && isPending) && (
                 <OperatorActionBar
@@ -326,6 +378,71 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
                   onDismiss={handleDismiss}
                 />
               )}
+
+              {/* Operator Notes & Assignment */}
+              <div className="pt-3 border-t border-dispatch-border space-y-3">
+                {/* Assignee */}
+                <div className="flex items-center gap-2">
+                  <UserCircle className="w-4 h-4 text-dispatch-text-tertiary flex-shrink-0" />
+                  <span className="text-xs text-dispatch-text-secondary w-16">Assigned</span>
+                  <select
+                    value={assignee}
+                    onChange={(e: { target: { value: string } }) => {
+                      setAssignee(e.target.value);
+                      setAssigneeSubmitted(false);
+                    }}
+                    className="flex-1 text-xs bg-dispatch-bg border border-dispatch-border rounded-md px-2 py-1 text-dispatch-text focus:outline-none focus:border-dispatch-accent-green"
+                  >
+                    {ASSIGNEES.map((a) => (
+                      <option key={a} value={a}>{a}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleAssigneeSubmit}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all flex-shrink-0',
+                      assigneeSubmitted
+                        ? 'bg-dispatch-status-green/20 text-dispatch-status-green border border-dispatch-status-green/30'
+                        : 'bg-dispatch-bg border border-dispatch-border text-dispatch-text-secondary hover:border-dispatch-accent-green hover:text-dispatch-accent-green'
+                    )}
+                  >
+                    <Check className="w-3 h-3" />
+                    {assigneeSubmitted ? 'Saved' : 'Assign'}
+                  </button>
+                </div>
+
+                {/* Notes input */}
+                <div className="flex items-start gap-2">
+                  <StickyNote className="w-4 h-4 text-dispatch-text-tertiary flex-shrink-0 mt-1" />
+                  <div className="flex-1 space-y-1.5">
+                    {savedNotes.map((n: { text: string; author: string; time: string }, i: number) => (
+                      <div key={i} className="bg-dispatch-bg rounded-md px-2 py-1.5 border border-dispatch-border">
+                        <p className="text-xs text-dispatch-text leading-relaxed">{n.text}</p>
+                        <span className="text-[10px] text-dispatch-text-tertiary">{n.author} · {n.time}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={note}
+                        onChange={(e: { target: { value: string } }) => setNote(e.target.value)}
+                        onKeyDown={(e: { key: string }) => {
+                          if (e.key === 'Enter' && note.trim()) {
+                            setSavedNotes((prev: { text: string; author: string; time: string }[]) => [...prev, {
+                              text: note.trim(),
+                              author: 'DM (you)',
+                              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                            }]);
+                            setNote('');
+                          }
+                        }}
+                        placeholder="Add internal note (Enter to save)…"
+                        className="flex-1 text-xs bg-dispatch-bg border border-dispatch-border rounded-md px-2 py-1.5 text-dispatch-text placeholder:text-dispatch-text-tertiary focus:outline-none focus:border-dispatch-accent-green"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

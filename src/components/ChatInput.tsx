@@ -7,7 +7,7 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ onSend, placeholder = 'Respond as customer...' }: ChatInputProps) {
+export function ChatInput({ onSend, placeholder = 'Send message to customer...' }: ChatInputProps) {
   const [message, setMessage] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {

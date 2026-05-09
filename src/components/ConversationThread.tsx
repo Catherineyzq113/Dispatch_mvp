@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { Message } from '@/types';
 import { Bot } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,6 +9,13 @@ interface ConversationThreadProps {
 }
 
 export function ConversationThread({ messages, customerInitial = 'C' }: ConversationThreadProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
   if (messages.length === 0) {
     return (
       <div className="bg-dispatch-bg rounded-lg p-4 border border-dispatch-border">
@@ -29,7 +37,7 @@ export function ConversationThread({ messages, customerInitial = 'C' }: Conversa
         <h4 className="text-sm font-semibold text-dispatch-text">Conversation</h4>
       </div>
 
-      <div className="space-y-3">
+      <div ref={scrollContainerRef} className="space-y-3 max-h-72 overflow-y-auto pr-1">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -41,8 +49,8 @@ export function ConversationThread({ messages, customerInitial = 'C' }: Conversa
             {/* Avatar */}
             <div className={cn(
               'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0',
-              message.sender === 'agent' 
-                ? 'bg-dispatch-accent-green/20' 
+              message.sender === 'agent'
+                ? 'bg-dispatch-accent-green/20'
                 : 'bg-dispatch-status-blue/20'
             )}>
               {message.sender === 'agent' ? (
