@@ -2,8 +2,8 @@ import type { FeedEntry } from '@/types';
 import { FeedCard } from './FeedCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { Filter, RefreshCw, AlertTriangle, Clock } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Filter, RefreshCw, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
 
 interface ActivityFeedProps {
   entries: FeedEntry[];
@@ -15,34 +15,6 @@ interface ActivityFeedProps {
 type FilterType = 'all' | 'alerts' | 'outreach' | 'bookings' | 'followups';
 type StatusFilter = 'all' | 'pending' | 'completed' | 'failed';
 
-function useElapsedMinutes(timestamp: Date) {
-  const [minutes, setMinutes] = useState(() =>
-    Math.floor((Date.now() - timestamp.getTime()) / 60000)
-  );
-  useEffect(() => {
-    const id = setInterval(() => {
-      setMinutes(Math.floor((Date.now() - timestamp.getTime()) / 60000));
-    }, 30000);
-    return () => clearInterval(id);
-  }, [timestamp]);
-  return minutes;
-}
-
-function SlaTimer({ timestamp, urgency }: { timestamp: Date; urgency: 'high' | 'medium' }) {
-  const minutes = useElapsedMinutes(timestamp);
-  const color = minutes >= 30
-    ? 'text-dispatch-status-red'
-    : minutes >= 15
-    ? 'text-dispatch-status-amber'
-    : 'text-dispatch-text-secondary';
-  const label = minutes < 1 ? 'Just now' : `${minutes}m waiting`;
-  return (
-    <span className={cn('flex items-center gap-1 text-[10px] font-mono', color, urgency === 'high' && minutes >= 15 && 'animate-pulse')}>
-      <Clock className="w-3 h-3" />
-      {label}
-    </span>
-  );
-}
 
 export function ActivityFeed({
   entries,
@@ -184,15 +156,7 @@ export function ActivityFeed({
               </div>
               <div className="space-y-2 rounded-lg border border-dispatch-status-amber/30 bg-dispatch-status-amber/5 p-2">
                 {actionRequired.map((entry) => (
-                  <div key={entry.id} className="relative">
-                    <div className="absolute top-3 right-12 z-10">
-                      <SlaTimer
-                        timestamp={entry.timestamp}
-                        urgency={entry.actionType === 'Alert Triage' ? 'high' : 'medium'}
-                      />
-                    </div>
-                    <FeedCard entry={entry} onUpdateEntry={onUpdateEntry} />
-                  </div>
+                  <FeedCard key={entry.id} entry={entry} onUpdateEntry={onUpdateEntry} />
                 ))}
               </div>
             </div>

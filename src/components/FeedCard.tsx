@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { FeedEntry, Message } from '@/types';
 import { TriggerContext } from './TriggerContext';
 import { ConversationThread } from './ConversationThread';
@@ -9,6 +9,19 @@ import { cn } from '@/lib/utils';
 import { Bot, ChevronDown, ChevronUp, Clock, Zap, Sparkles, UserCircle, StickyNote, Check } from 'lucide-react';
 
 const ASSIGNEES = ['Unassigned', 'DM (you)', 'Sarah K.', 'Tom R.', 'Priya N.'];
+
+function useElapsedMinutes(timestamp: Date) {
+  const [minutes, setMinutes] = useState(() =>
+    Math.floor((Date.now() - timestamp.getTime()) / 60000)
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMinutes(Math.floor((Date.now() - timestamp.getTime()) / 60000));
+    }, 30000);
+    return () => clearInterval(id);
+  }, [timestamp]);
+  return minutes;
+}
 
 interface FeedCardProps {
   entry: FeedEntry;
@@ -203,6 +216,8 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
   const isAlertTriage = currentEntry.actionType === 'Alert Triage';
   const isPending = currentEntry.outcome === 'pending';
   const isWarning = currentEntry.outcome === 'warning';
+  const isUrgent = (isProactiveOutreach && isPending) || (isAlertTriage && isWarning);
+  const elapsedMinutes = useElapsedMinutes(currentEntry.timestamp);
   // Get customer initial for avatar
   const customerInitial = currentEntry.customerName.charAt(0);
 
@@ -269,9 +284,21 @@ export function FeedCard({ entry, onUpdateEntry }: FeedCardProps) {
             </div>
             <div className="flex items-center gap-2">
               <Clock className="w-3 h-3 text-dispatch-text-tertiary" />
-              <span className="text-xs text-dispatch-text-tertiary">
-                {formatTimeAgo(currentEntry.timestamp)}
-              </span>
+              {isUrgent ? (
+                <span className={cn(
+                  'text-xs font-mono',
+                  elapsedMinutes >= 30 ? 'text-dispatch-status-red' :
+                  elapsedMinutes >= 15 ? 'text-dispatch-status-amber' :
+                  'text-dispatch-text-secondary',
+                  isAlertTriage && isWarning && elapsedMinutes >= 15 && 'animate-pulse'
+                )}>
+                  {elapsedMinutes < 1 ? 'Just now' : `${elapsedMinutes}m waiting`}
+                </span>
+              ) : (
+                <span className="text-xs text-dispatch-text-tertiary">
+                  {formatTimeAgo(currentEntry.timestamp)}
+                </span>
+              )}
             </div>
           </div>
 
